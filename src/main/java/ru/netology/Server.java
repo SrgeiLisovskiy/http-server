@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 public class Server {
     private final List validPaths = List.of("/index.html", "/spring.svg", "/spring.png", "/resources.html", "/styles.css", "/app.js", "/links.html", "/forms.html", "/classic.html", "/events.html", "/events.js");
     private int port;
+    private String path;
     private ExecutorService executor;
     private Request request;
     private HashMap<String, Map<String, Handler>> handlers;
@@ -34,15 +35,7 @@ public class Server {
                 final var out = new BufferedOutputStream(socket.getOutputStream());
         ) {
             request = Request.createRequest(in);
-            if (request != null) {
-                out.write((
-                        "HTTP/1.1 200 OK\r\n" +
-                                "Content-Length: 0\r\n" +
-                                "Connection: close\r\n" +
-                                "\r\n"
-                ).getBytes());
-                out.flush();
-            } else if (request == null) {
+            if (request == null) {
                 out.write((
                         "HTTP/1.1 400 Bad Request\r\n" +
                                 "Content-Length: 0\r\n" +
@@ -50,22 +43,33 @@ public class Server {
                                 "\r\n"
                 ).getBytes());
                 out.flush();
+            } else {
+                path = request.getPath();
             }
-            if (validPaths.contains(request.getPath())) {
-                defaultHandler(request, out);
+            if (validPaths.contains(path)) {
+                defaultHandler(path, out);
+            } else {
+                out.write((
+                        "HTTP/1.1 404 Not Found\r\n" +
+                                "Content-Length: 0\r\n" +
+                                "Connection: close\r\n" +
+                                "\r\n"
+                ).getBytes());
+                out.flush();
             }
+
         } catch (IOException ex) {
             throw new RuntimeException(ex);
         }
 
     }
 
-    public void defaultHandler(Request request, BufferedOutputStream out) throws IOException {
-        final var filePath = Path.of(".", "public", request.getPath());
+    public void defaultHandler(String path, BufferedOutputStream out) throws IOException {
+        final var filePath = Path.of(".", "public", path);
         final var mimeType = Files.probeContentType(filePath);
 
         // special case for classic
-        if (request.getPath().equals("/classic.html")) {
+        if (path.equals("/classic.html")) {
             final var template = Files.readString(filePath);
             final var content = template.replace(
                     "{time}",
